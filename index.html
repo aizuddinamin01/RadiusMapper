@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Map with Editable Markers, Radius, and Address</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <style>
+        body {
+            display: flex;
+        }
+        #marker-list {
+            width: 300px;
+            height: 100vh;
+            overflow-y: auto;
+            background: #f4f4f4;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        #map {
+            flex-grow: 1;
+            height: 100vh;
+        }
+        #inputs {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+        }
+        .marker-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            background: #fff;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+        }
+        .marker-item:hover {
+            background: #e2e2e2;
+        }
+        .delete-button {
+            background-color: red;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div id="marker-list">
+    <h3>Markers List</h3>
+    <div id="inputs">
+        <input id="locationName" type="text" placeholder="Location Name">
+        <input id="address" type="text" placeholder="Address (optional)">
+        <input id="latitude" type="number" placeholder="Latitude" step="any">
+        <input id="longitude" type="number" placeholder="Longitude" step="any">
+        <input id="radius" type="number" placeholder="Radius (in meters)">
+        <input id="radiusColor" type="color" value="#30a3ec">
+        <button onclick="addOrUpdateMarker()">Add/Update Marker</button>
+    </div>
+    <div id="markerItems"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+    // Initialize the map
+    const map = L.map('map').setView([0, 0], 2);
+
+    // Set up the OpenStreetMap tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Array to store all marker data
+    let markers = [];
+    let selectedMarker = null;
+
+    // Function to render markers in the list
+    function renderMarkerList() {
+        const markerItemsDiv = document.getElementById('markerItems');
+        markerItemsDiv.innerHTML = ''; // Clear the list
+
+        markers.forEach((markerData, index) => {
+            const markerItemDiv = document.createElement('div');
+            markerItemDiv.className = 'marker-item';
+            markerItemDiv.innerHTML = `
+                <span>Marker ${index + 1}: ${markerData.name} - Lat: ${markerData.lat.toFixed(2)}, Lng: ${markerData.lng.toFixed(2)}, Radius: ${markerData.radius}m</span>
+                <button class="delete-button" onclick="deleteMarker(${index})">Delete</button>
+            `;
+
+            // Event listener for selecting the marker from the list
+            markerItemDiv.addEventListener('click', () => {
+                selectMarker(index);
+            });
+
+            markerItemsDiv.appendChild(markerItemDiv);
+        });
+    }
+
+    // Function to add or update a marker
+    function addOrUpdateMarker() {
+        const name = document.getElementById('locationName').value;
+        const address = document.getElementById('address').value;
+        const lat = parseFloat(document.getElementById('latitude').value);
+        const lng = parseFloat(document.getElementById('longitude').value);
+        const radius = parseFloat(document.getElementById('radius').value);
+        const color = document.getElementById('radiusColor').value; // Get the selected color
+
+        if (!name || isNaN(lat) || isNaN(lng) || isNaN(radius)) {
+            alert('Please provide valid data for name, coordinates, and radius.');
+            return;
+        }
+
+        if (selectedMarker !== null) {
+            // Update existing marker
+            markers[selectedMarker].name = name;
+            markers[selectedMarker].address = address; // Update address
+            markers[selectedMarker].lat = lat;
+            markers[selectedMarker].lng = lng;
+            markers[selectedMarker].radius = radius;
+            markers[selectedMarker].color = color;
+
+            markers[selectedMarker].marker.setLatLng([lat, lng]);
+            markers[selectedMarker].circle.setLatLng([lat, lng]);
+            markers[selectedMarker].circle.setRadius(radius);
+            markers[selectedMarker].circle.setStyle({ color: color });
+
+            // Update the marker popup with the new name and optional address
+            const popupContent = address ? `<b>${name}</b><br>${address}` : `<b>${name}</b>`;
+            markers[selectedMarker].marker.bindPopup(popupContent).openPopup();
+
+            selectedMarker = null; // Deselect after updating
+        } else {
+            // Add new marker
+            const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+            const circle = L.circle([lat, lng], {
+                color: color, // Apply the selected color
+                fillColor: color,
+                fillOpacity: 0.5,
+                radius: radius // Radius in meters
+            }).addTo(map);
+
+            // Determine the content of the popup
+            const popupContent = address ? `<b>${name}</b><br>${address}` : `<b>${name}</b>`;
+            marker.bindPopup(popupContent).openPopup();
+
+            // Store marker and circle reference
+            markers.push({
+                name,
+                address,
+                lat,
+                lng,
+                radius,
+                color, // Store the color
+                marker,
+                circle
+            });
+
+            // Zoom to the new marker
+            map.setView([lat, lng], 10);
+
+            // Event listener for marker drag to update position
+            marker.on('dragend', function() {
+                const newLatLng = marker.getLatLng();
+                markers[markers.length - 1].lat = newLatLng.lat;
+                markers[markers.length - 1].lng = newLatLng.lng;
+                circle.setLatLng(newLatLng);
+                renderMarkerList();
+            });
+
+            // Event listener for marker click to select and zoom
+            marker.on('click', () => {
+                map.setView([lat, lng], 14); // Zoom in on click
+                selectMarker(markers.length - 1);
+            });
+        }
+
+        // Render the marker list
+        renderMarkerList();
+    }
+
+    // Function to select a marker for editing
+    function selectMarker(index) {
+        const markerData = markers[index];
+
+        document.getElementById('locationName').value = markerData.name;
+        document.getElementById('address').value = markerData.address;
+        document.getElementById('latitude').value = markerData.lat;
+        document.getElementById('longitude').value = markerData.lng;
+        document.getElementById('radius').value = markerData.radius;
+        document.getElementById('radiusColor').value = markerData.color;
+
+        selectedMarker = index; // Set marker as selected
+        map.setView([markerData.lat, markerData.lng], 10); // Zoom to the selected marker
+    }
+
+    // Function to delete a marker
+    function deleteMarker(index) {
+        // Remove the marker and circle from the map
+        map.removeLayer(markers[index].marker);
+        map.removeLayer(markers[index].circle);
+
+        // Remove the marker from the array
+        markers.splice(index, 1);
+
+        // Re-render the marker list
+        renderMarkerList();
+        // Clear the form inputs
+        document.getElementById('locationName').value = '';
+        document.getElementById('address').value = '';
+        document.getElementById('latitude').value = '';
+        document.getElementById('longitude').value = '';
+        document.getElementById('radius').value = '';
+        document.getElementById('radiusColor').value = '#30a3ec'; // Reset to default color
+        selectedMarker = null; // Deselect marker
+    }
+</script>
+
+</body>
+</html>
