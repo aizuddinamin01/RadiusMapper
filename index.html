@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leaflet Map with Editable Markers, Radius, and Address</title>
+    <title>RadiusMapper</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <style>
         body {
             display: flex;
@@ -59,6 +61,7 @@
         <input id="radius" type="number" placeholder="Radius (in meters)">
         <input id="radiusColor" type="color" value="#30a3ec">
         <button onclick="addOrUpdateMarker()">Add/Update Marker</button>
+        <button onclick="geocodeAddress()">Geocode Address</button>
     </div>
     <div id="markerItems"></div>
 </div>
@@ -72,6 +75,13 @@
     // Set up the OpenStreetMap tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Add the Leaflet Control Geocoder to the map
+    const geocoder = L.Control.Geocoder.nominatim();
+    L.Control.geocoder({
+        geocoder: geocoder,
+        position: 'topright'
     }).addTo(map);
 
     // Array to store all marker data
@@ -109,7 +119,7 @@
         const radius = parseFloat(document.getElementById('radius').value);
         const color = document.getElementById('radiusColor').value; // Get the selected color
 
-        if (!name || isNaN(lat) || isNaN(lng) || isNaN(radius)) {
+        if (!name || (isNaN(lat) && !address) || isNaN(radius)) {
             alert('Please provide valid data for name, coordinates, and radius.');
             return;
         }
@@ -182,6 +192,26 @@
         renderMarkerList();
     }
 
+    // Function to geocode address
+    function geocodeAddress() {
+        const address = document.getElementById('address').value;
+        if (!address) {
+            alert('Please enter an address to geocode.');
+            return;
+        }
+
+        geocoder.geocode(address, function(results) {
+            if (results.length > 0) {
+                const latLng = results[0].center;
+                document.getElementById('latitude').value = latLng.lat;
+                document.getElementById('longitude').value = latLng.lng;
+                map.setView(latLng, 14); // Zoom to the geocoded location
+            } else {
+                alert('Address not found.');
+            }
+        });
+    }
+
     // Function to select a marker for editing
     function selectMarker(index) {
         const markerData = markers[index];
@@ -206,16 +236,8 @@
         // Remove the marker from the array
         markers.splice(index, 1);
 
-        // Re-render the marker list
+        // Render the updated marker list
         renderMarkerList();
-        // Clear the form inputs
-        document.getElementById('locationName').value = '';
-        document.getElementById('address').value = '';
-        document.getElementById('latitude').value = '';
-        document.getElementById('longitude').value = '';
-        document.getElementById('radius').value = '';
-        document.getElementById('radiusColor').value = '#30a3ec'; // Reset to default color
-        selectedMarker = null; // Deselect marker
     }
 </script>
 
